@@ -1,0 +1,235 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id         Int               @id @default(autoincrement())
+  email      String            @unique
+  password   String
+  username   String?
+  picture    String?
+  public_id  String?
+  role       String            @default("user")
+  enabled    Boolean           @default(true)
+  orders     Order[]
+  carts      Cart[]
+  courses    PurchasedCourse[]
+  comments   Comment[]
+  profile    Profile?
+  activities UserActivity[] // เพิ่มการเก็บข้อมูลการใช้งานของผู้ใช้
+  interests  UserInterest[] // เพิ่มการเก็บข้อมูลความสนใจ
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+
+  episodeProgress EpisodeProgress[]
+}
+
+model UserActivity {
+  id         Int      @id @default(autoincrement())
+  user       User     @relation(fields: [userId], references: [id])
+  userId     Int
+  course     Course   @relation(fields: [courseId], references: [id])
+  courseId   Int
+  viewCount  Int      @default(1)
+  lastViewed DateTime @default(now())
+
+  @@unique([userId, courseId]) // กันไม่ให้ซ้ำ
+}
+
+model UserInterest {
+  id            Int    @id @default(autoincrement())
+  userId        Int // ผู้ใช้ที่สนใจคอร์ส
+  courseId      Int // คอร์สที่ผู้ใช้สนใจ
+  interestLevel Int    @default(0) // ระดับความสนใจ
+  user          User   @relation(fields: [userId], references: [id])
+  course        Course @relation(fields: [courseId], references: [id])
+}
+
+model EpisodeProgress {
+  id            Int       @id @default(autoincrement())
+  userId        Int
+  episodeId     Int
+  isCompleted   Boolean   @default(false)
+  lastWatchedAt DateTime? // เวลาดูล่าสุด
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  episode       Episode   @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+
+  isAccessible Boolean @default(false) // ตรวจสอบสถานะการชำระเงิน
+
+  @@unique([userId, episodeId])
+}
+
+model Course {
+  id          Int               @id @default(autoincrement())
+  title       String?
+  description String?
+  price       Float
+  picture     String?
+  public_id   String
+  sold        Int               @default(0)
+  time        Float             @default(0)
+  orders      OrderItem[]
+  cartItems   CousreOnCart[]
+  purchasedBy PurchasedCourse[]
+  episodes    Episode[]
+  categoryId  Int?
+  category    Category?         @relation(fields: [categoryId], references: [id])
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  comments   Comment[] // คอมเม้นต์ของคอร์ส
+  activities UserActivity[] // เพิ่มการเก็บกิจกรรมของผู้ใช้
+  interests  UserInterest[] // เพิ่มการเก็บความสนใจของผู้ใช้
+}
+
+model Episode {
+  id             Int     @id @default(autoincrement())
+  courseId       Int
+  title          String?
+  description    String?
+  episodetStatus String  @default("unpaid") // สถานะการชำระเงิน
+  episodeNo      Int     @default(1)
+  videoId        Int?    @unique
+  imageId        Int?    @unique
+  course         Course  @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  video          Video?  @relation(fields: [videoId], references: [id], onDelete: SetNull)
+  image          Image?  @relation(fields: [imageId], references: [id], onDelete: SetNull)
+
+  benefits EpisodeBenefit[]
+  progress EpisodeProgress[]
+}
+
+model EpisodeBenefit {
+  id        Int     @id @default(autoincrement())
+  episodeId Int
+  benefit   String?
+  episode   Episode @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+}
+
+model Comment {
+  id        Int      @id @default(autoincrement())
+  text      String // ข้อความคอมเม้นต์
+  rating    Float? // คะแนน (ดาว)
+  createdAt DateTime @default(now()) // เวลาที่คอมเม้นต์ถูกสร้าง
+  userId    Int // ผู้ที่คอมเม้นต์
+  courseId  Int // คอร์สที่ถูกคอมเม้นต์
+  user      User     @relation(fields: [userId], references: [id])
+  course    Course   @relation(fields: [courseId], references: [id])
+}
+
+model Profile {
+  id        Int       @id @default(autoincrement())
+  userId    Int       @unique
+  firstName String
+  lastName  String
+  birthday  DateTime?
+  phone     String?
+  address   String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+model Video {
+  id         Int      @id @default(autoincrement())
+  title      String
+  videoData  String
+  duration   Float?
+  fileSize   Int?
+  asset_id   String?
+  public_id  String?
+  url        String?
+  uploadedAt DateTime @default(now())
+  episode    Episode?
+}
+
+model Image {
+  id         Int      @id @default(autoincrement())
+  asset_id   String
+  public_id  String
+  url        String
+  secure_url String
+  uploadedAt DateTime @default(now())
+  episode    Episode?
+}
+
+model Order {
+  id        Int         @id @default(autoincrement())
+  userId    Int
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items     OrderItem[]
+  cartTotal Float
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  status    String  @default("paid")
+  paymentId String?
+  amount    Int
+  currency  String
+}
+
+model OrderItem {
+  id       Int    @id @default(autoincrement())
+  orderId  Int
+  courseId Int
+  price    Float
+  quantity Int    @default(1)
+  order    Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  course   Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+}
+
+// เก็บสถานนะคอร์สว่าลูกค้าจ่ายเงินรึยัง และคอร์สของใคร
+model PurchasedCourse {
+  id            Int      @id @default(autoincrement())
+  userId        Int
+  courseId      Int
+  purchasedAt   DateTime @default(now())
+  paymentStatus String   @default("unpaid") // สถานะการชำระเงิน
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course        Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+}
+
+// เก็บข้อมูล Order ในตะกร้า
+// เช่น ออเดอร์ 1 ราคา 1200 ของใคร userId
+model Cart {
+  id        Int            @id @default(autoincrement())
+  userId    Int
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+  cartTotal Float
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  courses   CousreOnCart[]
+}
+
+// เก็บข้อมูล course ว่าในตะกร้า
+// เช่น course 1 ราคา 1200 ของใคร userId
+model CousreOnCart {
+  id       Int      @id @default(autoincrement())
+  cartId   Int
+  courseId Int
+  price    Float
+  addedAt  DateTime @default(now())
+  cart     Cart     @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  course   Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+}
+
+model Category {
+  id        Int      @id @default(autoincrement())
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  courses   Course[]
+}
